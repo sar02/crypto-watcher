@@ -1,6 +1,8 @@
 # TODO: Uncomment the lcd_1in44 line and comment the lcd_stub one if you want to run it on the display
 # from lcd_1in44 import LCD
-from lcd_stub import LCD
+# from lcd_stub import LCD
+import ST7789
+import spidev
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -12,6 +14,13 @@ import pytz
 import math
 
 import requests
+
+# Raspberry Pi pin configuration:
+RST = 27
+DC = 25
+BL = 24
+bus = 0
+device = 0
 
 
 def fetch_ohlc(symbol: str) -> List[Tuple[float, ...]]:
@@ -46,9 +55,9 @@ def render_candlestick(ohlc: Tuple[float, ...], x: int, y_transformer: Callable[
 
 
 def render_ohlc_data(ohlc: List[Tuple[float, ...]], draw: ImageDraw):
-    X_START = 18
-    Y_START = 54
-    HEIGHT = 50
+    X_START = 25
+    Y_START = 90
+    HEIGHT = 110
 
     y_min = min([d[2] for d in ohlc])
     y_max = max([d[1] for d in ohlc])
@@ -58,9 +67,9 @@ def render_ohlc_data(ohlc: List[Tuple[float, ...]], draw: ImageDraw):
         offset = int(multiplier * (y - y_min))
         return Y_START + HEIGHT - offset
 
-    x = X_START + 24 * 4 + 1
+    x = X_START + 24 * 8 + 1
     for candle_data in ohlc[::-1]:
-        x -= 4
+        x -= 8
         render_candlestick(candle_data, x, y_transformer, draw)
 
 
@@ -71,23 +80,25 @@ def price_to_str(price: float) -> str:
 
 
 def main():
-    lcd = LCD()
-    lcd.LCD_Init()
-    lcd.LCD_Clear()
+    # 240x240 display with hardware SPI:
+    lcd = ST7789.ST7789(spidev.SpiDev(bus, device),RST, DC, BL)
+    lcd.Init()
+    lcd.clear()
 
-    img = Image.new("RGB", (lcd.width, lcd.height))
-    font = ImageFont.truetype("OpenSans-Regular.ttf", 20)
-    font_small = ImageFont.truetype("OpenSans-Regular.ttf", 16)
-    font_tiny = ImageFont.truetype("OpenSans-Regular.ttf", 12)
+    img = Image.new("RGB", (lcd.width, lcd.height),"BLACK")
+    font = ImageFont.truetype("OpenSans-Regular.ttf", 36)
+    font_small = ImageFont.truetype("OpenSans-Regular.ttf", 29)
+    font_tiny = ImageFont.truetype("OpenSans-Regular.ttf", 22)
+    font_teeny_tiny = ImageFont.truetype("OpenSans-Regular.ttf", 16)
 
-    timezone = pytz.timezone("US/Eastern")
+    timezone = pytz.timezone("Europe/London")
     while True:
-        price, diff, ohlc = fetch_crypto_data("btcusdt") # TODO: use any binance symbol you want (Ex.: DOGE = dogeusdt)
+        price, diff, ohlc = fetch_crypto_data("btcgbp") # TODO: use any binance symbol you want (Ex.: DOGE = dogeusdt)
 
         draw = ImageDraw.Draw(img)
-        draw.rectangle((0, 0, lcd.width, lcd.height), fill=(0, 0, 0, 0))
-        draw.text((8, 5), text="{}$".format(
-            price_to_str(price)), font=font, fill=(255, 255, 255, 255))
+        draw.rectangle((0, 0, lcd.width, lcd.height), fill="BLACK")
+        draw.text((8, 5), text="£{}".format(
+            price_to_str(price)), font=font, fill="WHITE")
 
         diff_symbol = ""
         diff_color = (255, 255, 255, 255)
@@ -97,14 +108,14 @@ def main():
         if diff < 0:
             diff_color = (255, 55, 55, 255)
 
-        draw.text((8, 30), text="{}{}$".format(diff_symbol,
+        draw.text((8, 45), text="{}{}".format(diff_symbol,
                                                price_to_str(diff)), font=font_small, fill=diff_color)
-        draw.text((6, 106), text=datetime.datetime.now(timezone).strftime("%Y-%m-%d %H:%M:%S"),
-                  font=font_tiny, fill=(200, 200, 200, 255))
+        draw.text((6, 210), text=datetime.datetime.now(timezone).strftime("%Y-%m-%d %H:%M:%S"),font=font_tiny, fill=(200, 200, 200, 255))
+        draw.text((175, 5), text="BTCGBP",font=font_teeny_tiny, fill=(200, 200, 200, 255))
 
         render_ohlc_data(ohlc, draw)
 
-        lcd.LCD_ShowImage(img)
+        lcd.ShowImage(img,0,0)
         time.sleep(30)
 
 
